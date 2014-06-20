@@ -67,7 +67,7 @@ public class Main {
 				break;
 			case "set":
 				password = st.nextToken();
-				passMan.set(domainName, "-", password);
+				passMan.set(domainName, password);
 				System.out.println("Domain (" + domainName + "), pass = \""
 						+ password + "\" Updated successfully !");
 				break;
