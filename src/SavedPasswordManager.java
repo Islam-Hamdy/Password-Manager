@@ -13,11 +13,13 @@ import javax.crypto.spec.SecretKeySpec;
 
 public class SavedPasswordManager {
 
-	// based on AES 
-	final int PASS_LEN = 128; //in bytes
+	// based on GCM/AES
+	final int BLOCK_LEN = 128; // in bits
+	final int SALT_LEN = 128; // in bits
 	final int PASS_TAG_LEN = 128; // in bits
-	final int DOMAIN_TAG_LEN = 256; //in bits using SHA256 
+	final int DOMAIN_TAG_LEN = 256; // in bits using SHA256
 	final int IV_LEN = 128; // in bits
+	final int PASS_LEN = 128; // in bytes
 
 	final String MAC_ALGORITHM = "HmacSHA256";
 	final String ENCRYPTION_ALGORITHM = "AES";
@@ -29,7 +31,8 @@ public class SavedPasswordManager {
 
 	Map<String, byte[]> domainPassMap = new HashMap<String, byte[]>();
 	Map<String, byte[]> passIVMap = new HashMap<String, byte[]>();
-
+	Map<String, byte[]> domainSaltMap = new HashMap<String, byte[]>();
+	
 	public SavedPasswordManager(byte[] encryptKey, byte[] MACKey) {
 		try {
 			secureRand = SecureRandom.getInstance(RANDOM_ALGORITHM);
@@ -51,7 +54,14 @@ public class SavedPasswordManager {
 		try {
 
 			domainTagString = new String(MACDomain(domain));
-			passwordEncrypted = encryptPassword(password);
+			
+			// generate random salt, save the salt related to the domainTag, and pad the the password after adding the salt
+			byte [] salt = new byte[SALT_LEN/8];
+			secureRand.nextBytes(salt);
+			domainSaltMap.put(domainTagString, salt);
+			byte[] paddedPass = saltAndPad(domainTagString, password, salt);
+			passwordEncrypted = encryptPassword(paddedPass);
+			
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
@@ -81,7 +91,8 @@ public class SavedPasswordManager {
 		
 		byte [] passwordEncrypted = domainPassMap.get(domainTagString);
 		try{
-			plainPass = decryptPassword(passwordEncrypted);
+			byte[] paddedPass = decryptPassword(passwordEncrypted);
+			plainPass = new String(removePadAndSalt(paddedPass));
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
@@ -105,9 +116,17 @@ public class SavedPasswordManager {
 		if (verify(domain, oldPassword)){
 			byte[] passwordEncrypted, domainTag;
 			try {
-				passwordEncrypted = encryptPassword(newPassword);
 				domainTag = MACDomain(domain);
-				domainPassMap.put(new String(domainTag), passwordEncrypted);
+				String domainTagString = new String(domainTag);
+				
+				// generate random salt, save the salt related to the domainTag, and pad the the password after adding the salt
+				byte [] salt = new byte[SALT_LEN/8]; // generate new salt with the new password
+				secureRand.nextBytes(salt);
+				domainSaltMap.put(domainTagString, salt); // updating the salt in the map
+				byte[] paddedPass = saltAndPad(domainTagString, newPassword, salt);
+				
+				passwordEncrypted = encryptPassword(paddedPass);
+				domainPassMap.put(domainTagString, passwordEncrypted);
 			} catch (Exception e) {
 				e.printStackTrace();
 			}
@@ -149,7 +168,14 @@ public class SavedPasswordManager {
 		String domainTagString ;
 		try {
 			domainTagString = new String(MACDomain(domain));
-			passwordEncrypted = encryptPassword(password);
+			
+			//fetch tag from map 
+			if (!domainSaltMap.containsKey(domainTagString))
+				return false;
+			byte[] salt = domainSaltMap.get(domainTagString);
+
+			byte[] paddedPass = saltAndPad(domainTagString, password, salt);
+			passwordEncrypted = encryptPassword(paddedPass);
 			if (domainPassMap.containsKey(domainTagString))
 				return passwordEncrypted.equals(domainPassMap.get(domainTagString)); 
 		} catch (Exception e){
@@ -172,20 +198,31 @@ public class SavedPasswordManager {
 		return tag;
 	}
 
+	
 	/**
 	 * @param pass
 	 * @return byte[] of the password after being padded into a PAD_LENGTH byte[]
 	 * NOTE: not used right now since GCM padds the password ..
 	 */
-	private byte[] pad(String pass){
+	private byte[] saltAndPad(String domainTag, String pass, byte[] salt){
+		byte[] saltedPass = Arrays.copyOf(pass.getBytes(), pass.length()+salt.length);
+		System.arraycopy(salt, 0, saltedPass, pass.length(), salt.length);
+		
 		//		if (pass.length() >= PASS_LEN)
 		//			throw new IllegalArgumentException("passwords should be smaller than padded size");
-
-		byte[] paddedPass = Arrays.copyOf(pass.getBytes(), PASS_LEN);
-		byte pad = (byte) (paddedPass.length - pass.length());
-		Arrays.fill(paddedPass, pass.length(), PASS_LEN-1, pad);
-
+		byte[] paddedPass = Arrays.copyOf(saltedPass, PASS_LEN);
+		byte pad = (byte) (paddedPass.length - saltedPass.length);
+		Arrays.fill(paddedPass, saltedPass.length, PASS_LEN, pad);
 		return paddedPass;
+	}
+	
+	/**
+	 * @param paddedPass
+	 * @return the clean encrypted password after removing the pad and the salt
+	 */
+	private byte[] removePadAndSalt(byte[] paddedPass){
+		int padSize = paddedPass[paddedPass.length-1];
+		return Arrays.copyOfRange(paddedPass, 0, paddedPass.length - padSize - SALT_LEN/8);
 	}
 
 	/**
@@ -193,19 +230,16 @@ public class SavedPasswordManager {
 	 * @return the encryption of the password using GCM mode of operation
 	 * @throws Exception
 	 */
-	private byte[] encryptPassword(String password) throws Exception{
+	private byte[] encryptPassword(byte[] paddedPassword) throws Exception{
 		byte[] IV = new byte[IV_LEN/8];
 		secureRand.nextBytes(IV);
 		// TODO try to change noPadding here 
 		Cipher gcm = Cipher.getInstance("AES/GCM/NoPadding", "BC");
-		//		Cipher.getInstance("AES/CBC/PKCS5Padding");
-
 		GCMParameterSpec GCMspec = new GCMParameterSpec(PASS_TAG_LEN, IV);
 
-
 		gcm.init(Cipher.ENCRYPT_MODE, encryptionKeySpec, GCMspec);
-		byte[] tag = gcm.doFinal(password.getBytes());
-		passIVMap.put(new String(tag), IV);
+		byte[] tag = gcm.doFinal(paddedPassword);
+		passIVMap.put(new String(tag), IV); //  bind IV to current cipherText
 		return tag;
 	}
 
@@ -214,7 +248,7 @@ public class SavedPasswordManager {
 	 * @return the plaintext password
 	 * @throws Exception 
 	 */
-	private String decryptPassword(byte[] passwordTag) throws Exception{
+	private byte[] decryptPassword(byte[] passwordTag) throws Exception{
 		// TODO try to change noPadding here 
 		Cipher gcm = Cipher.getInstance("AES/GCM/NoPadding", "BC");
 		String passwordTagString = new String(passwordTag);
@@ -228,6 +262,6 @@ public class SavedPasswordManager {
 		gcm.init(Cipher.DECRYPT_MODE, encryptionKeySpec, GCMspec);
 		byte[] plainPass = gcm.doFinal(passwordTag);
 
-		return new String(plainPass);
+		return plainPass;
 	}
 }

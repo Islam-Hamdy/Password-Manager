@@ -26,8 +26,8 @@ public class PasswordManager {
 		passMan = new SavedPasswordManager(mpm.getFirstKey(), mpm.getSecondKey());
 		passMan.add("facebook", "facebookPass");
 		System.out.println(passMan.get("facebook"));
-
-
+		
+		
 	}
 
 }
