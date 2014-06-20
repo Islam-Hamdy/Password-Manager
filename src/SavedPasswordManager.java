@@ -26,6 +26,7 @@ public class SavedPasswordManager {
 	SecretKeySpec MACKeySpec; // TODO: ask ?? encrypt all passwords with the same key
 	
 	TreeMap<byte[], byte[]> domainPassMap = new TreeMap<byte[], byte[]>();
+	TreeMap<byte[], byte[]> passIVMap = new TreeMap<byte[], byte[]>();
 	
 	public SavedPasswordManager(byte[] encryptKey, byte[] MACKey) {
 		try {
@@ -73,8 +74,15 @@ public class SavedPasswordManager {
 		}
 		
 		byte [] passwordEncrypted = domainPassMap.get(domainTag);
+		String plainPass = "" ;
 		
-		return "";
+		try {
+			plainPass = decryptPassword(passwordEncrypted);
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+		
+		return plainPass;
 	}
 
 	
@@ -187,28 +195,34 @@ public class SavedPasswordManager {
 		
 		// TODO try to change noPadding here 
 		Cipher eax = Cipher.getInstance("AES/EAX/NoPadding", "BC");
+//		Cipher.getInstance("AES/CBC/PKCS5Padding");
+		
 		GCMParameterSpec GCMspec = new GCMParameterSpec(PASS_TAG_LEN, IV);
 		
-		eax.init(Cipher.ENCRYPT_MODE, encryptionKeySpec, GCMspec);
-		byte[] tag = new byte[PASS_TAG_LEN];
-		eax.doFinal(tag);
+		if (eax.getBlockSize() != IV.length)
+			System.err.println("IV and Cipher have different block size");
 		
+		eax.init(Cipher.ENCRYPT_MODE, encryptionKeySpec, GCMspec);
+		byte[] tag = eax.doFinal(password.getBytes());
+		passIVMap.put(tag, IV);
 		return tag;
 	}
 	
 	/**
 	 * @param password
 	 * @return the plaintext password
+	 * @throws Exception 
 	 */
-	private String decryptPassword(byte[] password){
+	private String decryptPassword(byte[] password) throws Exception{
 		// TODO try to change noPadding here 
 		Cipher eax = Cipher.getInstance("AES/EAX/NoPadding", "BC");
+
+		byte[] IV = passIVMap.get(password);
 		GCMParameterSpec GCMspec = new GCMParameterSpec(PASS_TAG_LEN, IV);
 		
-		eax.init(Cipher.ENCRYPT_MODE, encryptionKeySpec, GCMspec);
-		byte[] tag = new byte[PASS_TAG_LEN];
-		eax.doFinal(tag);
+		eax.init(Cipher.DECRYPT_MODE, encryptionKeySpec, GCMspec);
+		byte[] plainPass = eax.doFinal(password);
 
-		return null;
+		return new String(plainPass);
 	}
 }
