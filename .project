@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <projectDescription>
 <<<<<<< HEAD
+<<<<<<< HEAD
 	<name>PasswordManager</name>
 =======
 <<<<<<< HEAD
@@ -9,6 +10,9 @@
 	<name>Password Manager</name>
 >>>>>>> savedPassword Manager implementation, BouncyCastle lib added
 >>>>>>> implementation of savedPasswordManager, bouncyCastle lib added
+=======
+	<name>PasswordManager</name>
+>>>>>>> ec9bb23e79e13ecfbdc0df14b276a016c9c8a740
 	<comment></comment>
 	<projects>
 	</projects>
