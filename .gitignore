@@ -1,8 +1,12 @@
-*.class
+# eclipse project files
+.classpath
+.project
+.settings/
+.settings/*
 
-# Bin folde
-/Bin/*
-/Bin
+# Bin folder
+bin/*
+bin
 
 # Mobile Tools for Java (J2ME)
 .mtj.tmp/
