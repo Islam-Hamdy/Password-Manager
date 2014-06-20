@@ -2,7 +2,8 @@ import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.util.Arrays;
-import java.util.TreeMap;
+import java.util.HashMap;
+import java.util.Map;
 
 import javax.crypto.Cipher;
 import javax.crypto.Mac;
@@ -12,22 +13,23 @@ import javax.crypto.spec.SecretKeySpec;
 
 public class SavedPasswordManager {
 
-	final int PASS_LEN = 64; //in bytes
+	// based on AES 
+	final int PASS_LEN = 128; //in bytes
 	final int PASS_TAG_LEN = 128; // in bits
 	final int DOMAIN_TAG_LEN = 256; //in bits using SHA256 
-	final int IV_LEN = 64; // in bits
-	
+	final int IV_LEN = 128; // in bits
+
 	final String MAC_ALGORITHM = "HmacSHA256";
 	final String ENCRYPTION_ALGORITHM = "AES";
 	final String RANDOM_ALGORITHM = "SHA1PRNG";
-	
+
 	SecureRandom secureRand;
 	SecretKeySpec encryptionKeySpec;
 	SecretKeySpec MACKeySpec; // TODO: ask ?? encrypt all passwords with the same key
-	
-	TreeMap<byte[], byte[]> domainPassMap = new TreeMap<byte[], byte[]>();
-	TreeMap<byte[], byte[]> passIVMap = new TreeMap<byte[], byte[]>();
-	
+
+	Map<String, byte[]> domainPassMap = new HashMap<String, byte[]>();
+	Map<String, byte[]> passIVMap = new HashMap<String, byte[]>();
+
 	public SavedPasswordManager(byte[] encryptKey, byte[] MACKey) {
 		try {
 			secureRand = SecureRandom.getInstance(RANDOM_ALGORITHM);
@@ -37,27 +39,27 @@ public class SavedPasswordManager {
 		encryptionKeySpec = new SecretKeySpec(encryptKey, ENCRYPTION_ALGORITHM);
 		MACKeySpec = new SecretKeySpec(MACKey, MAC_ALGORITHM);
 	}	
-	
+
 	/**
 	 * @param domain
 	 * @param password
 	 * adds new password to the system associated with the domain name
 	 */
 	public void add(String domain, String password){
-		byte[] domainTag = null, passwordEncrypted = null;
-		
+		byte[] passwordEncrypted = null;
+		String domainTagString="";
 		try {
-			
-			domainTag = MACDomain(domain);
+
+			domainTagString = new String(MACDomain(domain));
 			passwordEncrypted = encryptPassword(password);
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
-		
-		if (domainPassMap.containsKey(domainTag))
+
+		if (domainPassMap.containsKey(domainTagString))
 			throw new IllegalArgumentException("domain already bound");
-		
-		domainPassMap.put(domainTag, passwordEncrypted);
+
+		domainPassMap.put(domainTagString, passwordEncrypted);
 	}
 
 	/**
@@ -66,27 +68,29 @@ public class SavedPasswordManager {
 	 */
 	public String get(String domain){
 		byte[] domainTag = null;
+		String plainPass = "" ;
 		try {
 			domainTag = MACDomain(domain);
-		} catch (InvalidKeyException | NoSuchAlgorithmException e) {
-			// TODO Auto-generated catch block
+		} catch (NoSuchAlgorithmException | InvalidKeyException e){
 			e.printStackTrace();
 		}
+
+		String domainTagString = new String (domainTag);
+		if (!domainPassMap.containsKey(domainTagString))
+			throw new IllegalArgumentException("domain not found");
 		
-		byte [] passwordEncrypted = domainPassMap.get(domainTag);
-		String plainPass = "" ;
-		
-		try {
+		byte [] passwordEncrypted = domainPassMap.get(domainTagString);
+		try{
 			plainPass = decryptPassword(passwordEncrypted);
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
-		
+
 		return plainPass;
 	}
 
-	
-	
+
+
 	/**
 	 * @param domain
 	 * @param oldPassword
@@ -103,7 +107,7 @@ public class SavedPasswordManager {
 			try {
 				passwordEncrypted = encryptPassword(newPassword);
 				domainTag = MACDomain(domain);
-				domainPassMap.put(domainTag, passwordEncrypted);
+				domainPassMap.put(new String(domainTag), passwordEncrypted);
 			} catch (Exception e) {
 				e.printStackTrace();
 			}
@@ -111,10 +115,10 @@ public class SavedPasswordManager {
 		} else
 			return false;
 	}
-	
-	
-	
-	
+
+
+
+
 	/**
 	 * @param domain
 	 * @param password
@@ -122,18 +126,18 @@ public class SavedPasswordManager {
 	 */
 	public void remove(String domain, String password){
 		if (verify(domain, password)){
-			byte[] domainTag;
+			String domainTagString;
 			try {
-				domainTag = MACDomain(domain);
-				domainPassMap.remove(domainTag);
+				domainTagString = new String(MACDomain(domain));
+				domainPassMap.remove(domainTagString);
 			} catch (NoSuchAlgorithmException | InvalidKeyException e) {
 				e.printStackTrace();
 			}
 		}
 	}
 
-	
-	
+
+
 	/**
 	 * @param domain
 	 * @param password
@@ -141,19 +145,20 @@ public class SavedPasswordManager {
 	 * 		   false if domain no found, domain coupled with other password
 	 */
 	private boolean verify(String domain, String password){
-		byte [] domainTag, passwordEncrypted;
+		byte [] passwordEncrypted;
+		String domainTagString ;
 		try {
-			domainTag = MACDomain(domain);
+			domainTagString = new String(MACDomain(domain));
 			passwordEncrypted = encryptPassword(password);
-			if (domainPassMap.containsKey(domainTag))
-				return passwordEncrypted.equals(domainPassMap.get(domainTag)); 
+			if (domainPassMap.containsKey(domainTagString))
+				return passwordEncrypted.equals(domainPassMap.get(domainTagString)); 
 		} catch (Exception e){
 			e.printStackTrace();
 		}
 		return false;
 	} 
-	
-	
+
+
 	/**
 	 * @param domain
 	 * @return the tag resulted from MACing the domain
@@ -163,27 +168,26 @@ public class SavedPasswordManager {
 	private byte[] MACDomain(String domain) throws NoSuchAlgorithmException, InvalidKeyException{
 		Mac HMAC = Mac.getInstance(MAC_ALGORITHM);
 		HMAC.init(MACKeySpec);
-		byte[] tag = new byte[DOMAIN_TAG_LEN/8]; // we are using SHA 256
-     	HMAC.doFinal(tag);
-     	return tag;
+		byte[] tag = HMAC.doFinal(domain.getBytes());
+		return tag;
 	}
-	
+
 	/**
 	 * @param pass
 	 * @return byte[] of the password after being padded into a PAD_LENGTH byte[]
 	 * NOTE: not used right now since GCM padds the password ..
 	 */
 	private byte[] pad(String pass){
-//		if (pass.length() >= PASS_LEN)
-//			throw new IllegalArgumentException("passwords should be smaller than padded size");
-		
+		//		if (pass.length() >= PASS_LEN)
+		//			throw new IllegalArgumentException("passwords should be smaller than padded size");
+
 		byte[] paddedPass = Arrays.copyOf(pass.getBytes(), PASS_LEN);
 		byte pad = (byte) (paddedPass.length - pass.length());
 		Arrays.fill(paddedPass, pass.length(), PASS_LEN-1, pad);
-			
+
 		return paddedPass;
 	}
-	
+
 	/**
 	 * @param password
 	 * @return the encryption of the password using GCM mode of operation
@@ -192,36 +196,37 @@ public class SavedPasswordManager {
 	private byte[] encryptPassword(String password) throws Exception{
 		byte[] IV = new byte[IV_LEN/8];
 		secureRand.nextBytes(IV);
-		
 		// TODO try to change noPadding here 
-		Cipher eax = Cipher.getInstance("AES/EAX/NoPadding", "BC");
-//		Cipher.getInstance("AES/CBC/PKCS5Padding");
-		
+		Cipher gcm = Cipher.getInstance("AES/GCM/NoPadding", "BC");
+		//		Cipher.getInstance("AES/CBC/PKCS5Padding");
+
 		GCMParameterSpec GCMspec = new GCMParameterSpec(PASS_TAG_LEN, IV);
-		
-		if (eax.getBlockSize() != IV.length)
-			System.err.println("IV and Cipher have different block size");
-		
-		eax.init(Cipher.ENCRYPT_MODE, encryptionKeySpec, GCMspec);
-		byte[] tag = eax.doFinal(password.getBytes());
-		passIVMap.put(tag, IV);
+
+
+		gcm.init(Cipher.ENCRYPT_MODE, encryptionKeySpec, GCMspec);
+		byte[] tag = gcm.doFinal(password.getBytes());
+		passIVMap.put(new String(tag), IV);
 		return tag;
 	}
-	
+
 	/**
 	 * @param password
 	 * @return the plaintext password
 	 * @throws Exception 
 	 */
-	private String decryptPassword(byte[] password) throws Exception{
+	private String decryptPassword(byte[] passwordTag) throws Exception{
 		// TODO try to change noPadding here 
-		Cipher eax = Cipher.getInstance("AES/EAX/NoPadding", "BC");
+		Cipher gcm = Cipher.getInstance("AES/GCM/NoPadding", "BC");
+		String passwordTagString = new String(passwordTag);
+		if (!passIVMap.containsKey(passwordTagString))
+			throw new IllegalArgumentException("password not found");
 
-		byte[] IV = passIVMap.get(password);
+		byte[] IV = passIVMap.get(passwordTagString);
+
 		GCMParameterSpec GCMspec = new GCMParameterSpec(PASS_TAG_LEN, IV);
-		
-		eax.init(Cipher.DECRYPT_MODE, encryptionKeySpec, GCMspec);
-		byte[] plainPass = eax.doFinal(password);
+
+		gcm.init(Cipher.DECRYPT_MODE, encryptionKeySpec, GCMspec);
+		byte[] plainPass = gcm.doFinal(passwordTag);
 
 		return new String(plainPass);
 	}
