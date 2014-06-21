@@ -2,7 +2,6 @@ Password Manager
 ==============
 **Cryptography course project  Spring 2014**
 
-[TOC]
 
 ### Project Description  ###
 
@@ -50,7 +49,7 @@ Stick to the following format !!
 |   Name		|          Function        |
 |:----------------:|--------------------------|
 |   Add     | `add <domain-name> <password>` adds a new < domain name, password >  to the system, returns error of domain name is already in the system |
-|   Set      | `set <domain-name> <new-password>` replaces the old password related with the domain name with the new password. == **Note** if the domain name is not found new domain name, password pair is saved ==    |
+|   Set      | `set <domain-name> <new-password>` replaces the old password related with the domain name with the new password. **Note** if the domain name is not found new domain name, password pair is saved  |
 |   Get   | `get <domain-name>` returns the plain text password related to domain name   |
 |   Remove | `remove <domain-name> <password>` removes the   < domain name, password >  pair from the system after verifying the password    |
 |  Exit | `exit` close the input stream and close the application |
