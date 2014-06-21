@@ -20,6 +20,7 @@ public class SavedPasswordManager {
 	final int DOMAIN_TAG_LEN = 256; // in bits using SHA256
 	final int IV_LEN = 128; // in bits
 	final int PASS_LEN = 128; // in bytes
+	final int SWAP_BLOCK_TUPLE_LEN = 2*DOMAIN_TAG_LEN/8; // in bytes 
 
 	final String MAC_ALGORITHM = "HmacSHA256";
 	final String ENCRYPTION_ALGORITHM = "AES";
@@ -32,7 +33,10 @@ public class SavedPasswordManager {
 	Map<String, byte[]> domainPassMap = new HashMap<String, byte[]>();
 	Map<String, byte[]> passIVMap = new HashMap<String, byte[]>();
 	Map<String, byte[]> domainSaltMap = new HashMap<String, byte[]>();
-	
+
+	Map<String, byte[]> swapAttackBlocker = new HashMap<String, byte[]>();
+	// contains mapping between domain tags and chosen subset of the encryptedpass||domain   
+
 	public SavedPasswordManager(byte[] encryptKey, byte[] MACKey) {
 		try {
 			secureRand = SecureRandom.getInstance(RANDOM_ALGORITHM);
@@ -49,19 +53,21 @@ public class SavedPasswordManager {
 	 * adds new password to the system associated with the domain name
 	 */
 	public void add(String domain, String password){
-		byte[] passwordEncrypted = null;
+		byte[] passwordEncrypted = null, domainTag;
 		String domainTagString="";
 		try {
 
-			domainTagString = new String(MACDomain(domain));
-			
+			domainTagString = new String(domainTag = MACDomain(domain));
+
 			// generate random salt, save the salt related to the domainTag, and pad the the password after adding the salt
 			byte [] salt = new byte[SALT_LEN/8];
 			secureRand.nextBytes(salt);
 			domainSaltMap.put(domainTagString, salt);
 			byte[] paddedPass = saltAndPad(domainTagString, password, salt);
 			passwordEncrypted = encryptPassword(paddedPass);
-			
+
+			byte[] swapBlockerPair = makeSwapBlockPair(domainTag, passwordEncrypted);
+			swapAttackBlocker.put(domainTagString, swapBlockerPair);
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
@@ -73,8 +79,9 @@ public class SavedPasswordManager {
 	}
 
 	/**
-	 * @param domain
+	 * @param domain 
 	 * @return saved password bound with that domain
+	 * 		   null of swapAttack detected
 	 */
 	public String get(String domain){
 		byte[] domainTag = null;
@@ -88,18 +95,30 @@ public class SavedPasswordManager {
 		String domainTagString = new String (domainTag);
 		if (!domainPassMap.containsKey(domainTagString))
 			throw new IllegalArgumentException("domain not found");
-		
+
 		byte [] passwordEncrypted = domainPassMap.get(domainTagString);
+
+		boolean swapAttack = false;
 		try{
+			// check for swap attacks
+			byte[] swapAttackPair = makeSwapBlockPair(domainTag, passwordEncrypted);
+			byte[] savedSwapPair = swapAttackBlocker.get(domainTag);
+
+			for (int i = 0; i < savedSwapPair.length && !swapAttack; i++) 
+				if (swapAttackPair[i] != savedSwapPair[i])
+					swapAttack = true;
+			
+			if (swapAttack)
+				return null;
+			
 			byte[] paddedPass = decryptPassword(passwordEncrypted);
 			plainPass = new String(removePadAndSalt(paddedPass));
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
-
+		
 		return plainPass;
 	}
-
 
 
 	/**
@@ -118,13 +137,13 @@ public class SavedPasswordManager {
 			try {
 				domainTag = MACDomain(domain);
 				String domainTagString = new String(domainTag);
-				
+
 				// generate random salt, save the salt related to the domainTag, and pad the the password after adding the salt
 				byte [] salt = new byte[SALT_LEN/8]; // generate new salt with the new password
 				secureRand.nextBytes(salt);
 				domainSaltMap.put(domainTagString, salt); // updating the salt in the map
 				byte[] paddedPass = saltAndPad(domainTagString, newPassword, salt);
-				
+
 				passwordEncrypted = encryptPassword(paddedPass);
 				domainPassMap.put(domainTagString, passwordEncrypted);
 			} catch (Exception e) {
@@ -158,17 +177,33 @@ public class SavedPasswordManager {
 
 
 	/**
+	 * @param domainTag
+	 * @param encryptedPass
+	 * @return MAC tag for the "domainTag"||"encryptedPass(first 128bit)" 
+	 * @throws NoSuchAlgorithmException
+	 * @throws InvalidKeyException
+	 */
+	private byte[] makeSwapBlockPair(byte[] domainTag, byte[] encryptedPass) throws NoSuchAlgorithmException, InvalidKeyException{
+		byte [] data = Arrays.copyOf(domainTag, SWAP_BLOCK_TUPLE_LEN);
+		System.arraycopy(encryptedPass, 0, data, domainTag.length, SWAP_BLOCK_TUPLE_LEN-DOMAIN_TAG_LEN/8);
+
+		Mac HMAC = Mac.getInstance(MAC_ALGORITHM);
+		HMAC.init(MACKeySpec);
+		return HMAC.doFinal(data);  
+	}
+
+	/**
 	 * @param domain
 	 * @param password
 	 * @return true if the given domain and password saved in the system
 	 * 		   false if domain no found, domain coupled with other password
 	 */
 	private boolean verify(String domain, String password){
-		byte [] passwordEncrypted;
+		byte [] passwordEncrypted, domainTag;
 		String domainTagString ;
 		try {
-			domainTagString = new String(MACDomain(domain));
-			
+			domainTagString = new String(domainTag = MACDomain(domain));
+
 			//fetch tag from map 
 			if (!domainSaltMap.containsKey(domainTagString))
 				return false;
@@ -176,12 +211,25 @@ public class SavedPasswordManager {
 
 			byte[] paddedPass = saltAndPad(domainTagString, password, salt);
 			passwordEncrypted = encryptPassword(paddedPass);
-			if (domainPassMap.containsKey(domainTagString))
-				return passwordEncrypted.equals(domainPassMap.get(domainTagString)); 
+			if (!domainPassMap.containsKey(domainTagString))
+				return false;
+
+			if (!passwordEncrypted.equals(domainPassMap.get(domainTagString)))
+				return false;
+
+			// check for swap atacks 
+			byte[] swapAttackPair = makeSwapBlockPair(domainTag, passwordEncrypted);
+			byte[] savedSwapPair = swapAttackBlocker.get(domainTag);
+
+
+			for (int i = 0; i < savedSwapPair.length; i++) 
+				if (swapAttackPair[i] != savedSwapPair[i])
+					return false;
+
 		} catch (Exception e){
 			e.printStackTrace();
 		}
-		return false;
+		return true;
 	} 
 
 
@@ -198,7 +246,7 @@ public class SavedPasswordManager {
 		return tag;
 	}
 
-	
+
 	/**
 	 * @param pass
 	 * @return byte[] of the password after being padded into a PAD_LENGTH byte[]
@@ -207,7 +255,7 @@ public class SavedPasswordManager {
 	private byte[] saltAndPad(String domainTag, String pass, byte[] salt){
 		byte[] saltedPass = Arrays.copyOf(pass.getBytes(), pass.length()+salt.length);
 		System.arraycopy(salt, 0, saltedPass, pass.length(), salt.length);
-		
+
 		//		if (pass.length() >= PASS_LEN)
 		//			throw new IllegalArgumentException("passwords should be smaller than padded size");
 		byte[] paddedPass = Arrays.copyOf(saltedPass, PASS_LEN);
@@ -215,7 +263,7 @@ public class SavedPasswordManager {
 		Arrays.fill(paddedPass, saltedPass.length, PASS_LEN, pad);
 		return paddedPass;
 	}
-	
+
 	/**
 	 * @param paddedPass
 	 * @return the clean encrypted password after removing the pad and the salt
