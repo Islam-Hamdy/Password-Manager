@@ -163,12 +163,14 @@ public class SavedPasswordManager {
 			String domainTagString;
 			try {
 				domainTagString = new String(MACDomain(domain));
-				if (!domainPassMap.containsKey(domainTagString))
-					throw new IllegalArgumentException("domain not found");
+//				if (!domainPassMap.containsKey(domainTagString))
+//					throw new IllegalArgumentException("domain not found");
 				domainPassMap.remove(domainTagString);
 			} catch (NoSuchAlgorithmException | InvalidKeyException e) {
 				e.printStackTrace();
 			}
+		}else {
+			throw new IllegalArgumentException("domain/password didn't match");
 		}
 	}
 
@@ -204,24 +206,25 @@ public class SavedPasswordManager {
 			if (!domainSaltMap.containsKey(domainTagString))
 				return false;
 			byte[] salt = domainSaltMap.get(domainTagString);
-
 			byte[] paddedPass = saltAndPad(domainTagString, password, salt);
-
-			passwordEncrypted = encryptPassword(paddedPass);
+			
+			byte[] IV = passIVMap.get(new String(domainPassMap.get(domainTagString)));
+			passwordEncrypted = encryptPassword(paddedPass, IV);
 			if (!domainPassMap.containsKey(domainTagString))
 				return false;
 
-			if (!passwordEncrypted.equals(domainPassMap.get(domainTagString)))
+			// check that the 2 passwords are equal
+			byte[] savedPass = domainPassMap.get(domainTagString);
+			
+			if (!Arrays.equals(savedPass, passwordEncrypted))
 				return false;
-
-			// check for swap atacks 
+			
+			// check for swap attacks 
 			byte[] swapAttackPair = makeSwapBlockPair(domainTag, passwordEncrypted);
-			byte[] savedSwapPair = swapAttackBlocker.get(domainTag);
+			byte[] savedSwapPair = swapAttackBlocker.get(domainTagString);
 
-
-			for (int i = 0; i < savedSwapPair.length; i++) 
-				if (swapAttackPair[i] != savedSwapPair[i])
-					return false;
+			if (!Arrays.equals(swapAttackPair, savedSwapPair))
+				return false;
 
 		} catch (Exception e){
 			e.printStackTrace();
@@ -274,29 +277,41 @@ public class SavedPasswordManager {
 
 	/**
 	 * @param password
+	 * @param IV initial vector  
+	 * @return the encryption of the password using GCM mode of operation based on the passed IV
+	 * @throws Exception
+	 */
+	private byte[] encryptPassword(byte[] paddedPassword, byte[] IV) throws Exception {
+		Cipher gcm = Cipher.getInstance("AES/GCM/NoPadding", "BC");
+		GCMParameterSpec GCMspec = new GCMParameterSpec(PASS_TAG_LEN, IV);
+
+		gcm.init(Cipher.ENCRYPT_MODE, encryptionKeySpec, GCMspec);
+		return gcm.doFinal(paddedPassword);
+	}
+
+
+	/*
+	 * @param password
 	 * @return the encryption of the password using GCM mode of operation
 	 * @throws Exception
 	 */
 	private byte[] encryptPassword(byte[] paddedPassword) throws Exception {
 		byte[] IV = new byte[IV_LEN / 8];
 		secureRand.nextBytes(IV);
-		// TODO try to change noPadding here
-		Cipher gcm = Cipher.getInstance("AES/GCM/NoPadding", "BC");
-		GCMParameterSpec GCMspec = new GCMParameterSpec(PASS_TAG_LEN, IV);
-
-		gcm.init(Cipher.ENCRYPT_MODE, encryptionKeySpec, GCMspec);
-		byte[] tag = gcm.doFinal(paddedPassword);
+		byte [] tag = encryptPassword(paddedPassword, IV);
 		passIVMap.put(new String(tag), IV); // bind IV to current cipherText
 		return tag;
 	}
 
+	
+	
+	
 	/**
 	 * @param password
 	 * @return the plaintext password
 	 * @throws Exception
 	 */
 	private byte[] decryptPassword(byte[] passwordTag) throws Exception {
-		// TODO try to change noPadding here
 		Cipher gcm = Cipher.getInstance("AES/GCM/NoPadding", "BC");
 		String passwordTagString = new String(passwordTag);
 		if (!passIVMap.containsKey(passwordTagString))
