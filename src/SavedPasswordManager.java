@@ -143,6 +143,10 @@ public class SavedPasswordManager {
 
 			passwordEncrypted = encryptPassword(paddedPass);
 			domainPassMap.put(domainTagString, passwordEncrypted);
+			
+			byte[] swapAttackPair = makeSwapBlockPair(domainTag, passwordEncrypted);
+			swapAttackBlocker.put(domainTagString, swapAttackPair);
+			
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
@@ -159,6 +163,8 @@ public class SavedPasswordManager {
 			String domainTagString;
 			try {
 				domainTagString = new String(MACDomain(domain));
+				if (!domainPassMap.containsKey(domainTagString))
+					throw new IllegalArgumentException("domain not found");
 				domainPassMap.remove(domainTagString);
 			} catch (NoSuchAlgorithmException | InvalidKeyException e) {
 				e.printStackTrace();
