@@ -48,7 +48,7 @@ public class SaltKeyPair {
 
 		bi = new BigInteger(1, sk);
 		String hex2 = bi.toString(16);
-		paddingLength = (salt.length * 2) - hex2.length();
+		paddingLength = (sk.length * 2) - hex2.length();
 		if (paddingLength > 0) {
 			hex2 = String.format("%0" + paddingLength + "d", 0) + hex2;
 		}
