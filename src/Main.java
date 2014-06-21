@@ -22,6 +22,7 @@ public class Main {
 		Scanner s = new Scanner(System.in);
 		System.out.println("Enter your Master Pass : ");
 		String pass = s.nextLine();
+		s.close();
 
 		boolean validLogin = mpm.login(pass);
 		if (!validLogin) {
@@ -40,7 +41,6 @@ public class Main {
 		parseInput();
 		flushSerializedData();
 
-		s.close();
 	}
 
 	// add <domain_name> <password>
@@ -134,6 +134,20 @@ public class Main {
 			return;
 		}
 
+		// Loading swap_attack_map from the serialized file
+		try {
+			FileInputStream fis = new FileInputStream("swap_attack_map.ser");
+			ObjectInputStream ois = new ObjectInputStream(fis);
+			passMan.swapAttackBlocker = (Map<String, byte[]>) ois.readObject();
+			ois.close();
+			fis.close();
+		} catch (IOException ioe) {
+			ioe.printStackTrace();
+			return;
+		} catch (ClassNotFoundException c) {
+			c.printStackTrace();
+			return;
+		}
 	}
 
 	/**
@@ -168,6 +182,17 @@ public class Main {
 			FileOutputStream fos = new FileOutputStream("pass_iv_map.ser");
 			ObjectOutputStream oos = new ObjectOutputStream(fos);
 			oos.writeObject(passMan.passIVMap);
+			oos.close();
+			fos.close();
+		} catch (IOException ioe) {
+			ioe.printStackTrace();
+		}
+
+		// Flush swap_attack map to a serialized file
+		try {
+			FileOutputStream fos = new FileOutputStream("swap_attack_map.ser");
+			ObjectOutputStream oos = new ObjectOutputStream(fos);
+			oos.writeObject(passMan.swapAttackBlocker);
 			oos.close();
 			fos.close();
 		} catch (IOException ioe) {
