@@ -4,7 +4,6 @@ Password Manager
 
 
 ### Project Description  ###
-
 In this project you will implement a password manager. The password manager stores the passwords for every domain the user wishes to. The password manager should satisfy the following requirements.
 
 1. A master passwords should be used to generate the encryption and authentication keys needed using PBKDF2.
@@ -43,7 +42,6 @@ In this project you will implement a password manager. The password manager stor
 
 
 ###  Supported functions ###
-
 Stick to the following format !!
 
 |   Name		|          Function        |
@@ -56,8 +54,7 @@ Stick to the following format !!
 
 
 ###  Project report ###
-Report can be found in this [link](https://github.com/jbt/markdown-editor).
-
+Report can be found in this [link](/Report.md).
 
 
 ### Useful stuff used to make this
