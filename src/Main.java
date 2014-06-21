@@ -55,29 +55,33 @@ public class Main {
 			String domainName = st.nextToken();
 			String password = "";
 
-			switch (command) {
-			case "add":
-				password = st.nextToken();
-				passMan.add(domainName, password);
-				System.out.println("Domain (" + domainName + "), pass = \""
-						+ password + "\" Added successfully !");
-				break;
-			case "set":
-				password = st.nextToken();
-				passMan.set(domainName, password);
-				System.out.println("Domain (" + domainName + "), pass = \""
-						+ password + "\" Updated successfully !");
-				break;
-			case "get":
-				System.out.println("Domain (" + domainName + "), pass = \""
-						+ passMan.get(domainName) + "\"");
-				break;
-			case "remove":
-				password = st.nextToken();
-				passMan.remove(domainName, password);
-				System.out.println("Domain (" + domainName + "), pass = \""
-						+ password + "\" Removed successfully !");
-				break;
+			try {
+				switch (command) {
+				case "add":
+					password = st.nextToken();
+					passMan.add(domainName, password);
+					System.out.println("Domain (" + domainName + "), pass = \""
+							+ password + "\" Added successfully !");
+					break;
+				case "set":
+					password = st.nextToken();
+					passMan.set(domainName, password);
+					System.out.println("Domain (" + domainName + "), pass = \""
+							+ password + "\" Updated successfully !");
+					break;
+				case "get":
+					System.out.println("Domain (" + domainName + "), pass = \""
+							+ passMan.get(domainName) + "\"");
+					break;
+				case "remove":
+					password = st.nextToken();
+					passMan.remove(domainName, password);
+					System.out.println("Domain (" + domainName + "), pass = \""
+							+ password + "\" Removed successfully !");
+					break;
+				}
+			} catch (Exception e) {
+				System.err.println(e.getMessage());
 			}
 		}
 		buff.close();
