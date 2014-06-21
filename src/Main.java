@@ -20,15 +20,15 @@ public class Main {
 		mpm = new MasterPassManager();
 
 		buff = new BufferedReader(new InputStreamReader(System.in));
-		System.out.println("Enter your Master Pass : ");
+		System.out.println("Enter your master password : ");
 		String pass = buff.readLine();
 
 		boolean validLogin = mpm.login(pass);
 		if (!validLogin) {
 			mpm.createAccount(pass);
-			System.out.println("Account Created");
+			System.out.println("New account created !");
 		} else {
-			System.out.println("Valid pass");
+			System.out.println("Successful login, valid password !");
 		}
 
 		passMan = new SavedPasswordManager(mpm.getFirstKey(),
@@ -49,7 +49,7 @@ public class Main {
 		StringTokenizer st;
 		String input = "";
 
-		while ((input = buff.readLine()) != null) {
+		while (!(input = buff.readLine()).equals("exit")) {
 			st = new StringTokenizer(input);
 			String command = st.nextToken();
 			String domainName = st.nextToken();
