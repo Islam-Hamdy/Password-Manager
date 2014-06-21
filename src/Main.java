@@ -7,22 +7,21 @@ import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.security.Security;
 import java.util.Map;
-import java.util.Scanner;
 import java.util.StringTokenizer;
 
 public class Main {
 	static MasterPassManager mpm;
 	static SavedPasswordManager passMan;
+	static BufferedReader buff;
 
 	public static void main(String[] args) throws IOException {
 		Security.addProvider(new org.bouncycastle.jce.provider.BouncyCastleProvider());
 
 		mpm = new MasterPassManager();
 
-		Scanner s = new Scanner(System.in);
+		buff = new BufferedReader(new InputStreamReader(System.in));
 		System.out.println("Enter your Master Pass : ");
-		String pass = s.nextLine();
-		s.close();
+		String pass = buff.readLine();
 
 		boolean validLogin = mpm.login(pass);
 		if (!validLogin) {
@@ -40,7 +39,6 @@ public class Main {
 
 		parseInput();
 		flushSerializedData();
-
 	}
 
 	// add <domain_name> <password>
@@ -50,8 +48,7 @@ public class Main {
 	private static void parseInput() throws IOException {
 		StringTokenizer st;
 		String input = "";
-		BufferedReader buff = new BufferedReader(new InputStreamReader(
-				System.in));
+
 		while ((input = buff.readLine()) != null) {
 			st = new StringTokenizer(input);
 			String command = st.nextToken();

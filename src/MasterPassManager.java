@@ -42,7 +42,11 @@ public class MasterPassManager {
 
 	public boolean login(String pass) {
 		try {
-			Scanner s = new Scanner(new File(KEYSFILENAME));
+			File keys_file = new File(KEYSFILENAME);
+			if (!keys_file.exists())
+				return false;
+
+			Scanner s = new Scanner(keys_file);
 			String line = s.nextLine();
 			SaltKeyPair skp1 = new SaltKeyPair(line);
 			line = s.nextLine();
@@ -76,5 +80,4 @@ public class MasterPassManager {
 
 		return false;
 	}
-
 }

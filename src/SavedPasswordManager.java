@@ -105,7 +105,7 @@ public class SavedPasswordManager {
 		try{
 			// check for swap attacks
 			byte[] swapAttackPair = makeSwapBlockPair(domainTag, passwordEncrypted);
-			byte[] savedSwapPair = swapAttackBlocker.get(domainTag);
+			byte[] savedSwapPair = swapAttackBlocker.get(domainTagString);
 
 			for (int i = 0; i < savedSwapPair.length && !swapAttack; i++) 
 				if (swapAttackPair[i] != savedSwapPair[i])
